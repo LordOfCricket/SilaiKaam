@@ -1,0 +1,134 @@
+.footer {
+  --footer-line: rgba(246, 241, 231, 0.16);
+  --footer-text-soft: rgba(246, 241, 231, 0.62);
+  --footer-text-faint: rgba(246, 241, 231, 0.4);
+
+  position: relative;
+  overflow: hidden;
+  background: var(--color-ink);
+  color: var(--color-canvas);
+  border-top: 1px dashed var(--color-thread-soft);
+}
+
+.decor {
+  position: absolute;
+  top: -4rem;
+  right: -2rem;
+  width: 18rem;
+  height: 18rem;
+  color: var(--color-canvas);
+  opacity: 0.04;
+  pointer-events: none;
+}
+
+.inner {
+  position: relative;
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: var(--space-9) var(--space-6) var(--space-6);
+}
+
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.brand {
+  max-width: 22rem;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--color-canvas);
+  margin-bottom: var(--space-3);
+}
+
+.statement {
+  font-size: var(--fs-small);
+  color: var(--footer-text-soft);
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-7) var(--space-6);
+}
+
+.columnLabel {
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--footer-text-faint);
+  margin-bottom: var(--space-4);
+}
+
+.linkList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.link {
+  font-size: var(--fs-small);
+  color: var(--footer-text-soft);
+  width: fit-content;
+  transition: color 0.25s var(--ease-editorial);
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--color-canvas);
+}
+
+.placeholder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-small);
+  color: var(--footer-text-faint);
+}
+
+.soonTag {
+  font-size: 0.6875rem;
+  font-style: italic;
+  color: var(--footer-text-faint);
+}
+
+.divider {
+  border: none;
+  border-top: 1px dashed var(--footer-line);
+  margin-bottom: var(--space-5);
+}
+
+.bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--footer-text-faint);
+}
+
+.legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+@media (min-width: 640px) {
+  .columns {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: var(--space-9);
+  }
+}

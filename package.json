@@ -10,6 +10,10 @@
   "packageManager": "pnpm@12.4.1",
   "scripts": {
     "dev": "pnpm -r --parallel --filter=./apps/* --filter=./services/* run dev",
+    "dev:web": "pnpm --filter @silaikaam/web run dev",
+    "dev:backend": "pnpm -r --parallel --filter=./services/* --filter=@silaikaam/api-gateway run dev",
+    "dev:mobile": "pnpm --filter @silaikaam/mobile run dev",
+    "dev:full": "pnpm run dev",
     "build": "pnpm -r --filter=./apps/* --filter=./services/* --filter=./packages/* run --if-present build",
     "lint": "pnpm -r run --if-present lint",
     "typecheck": "pnpm -r run --if-present typecheck",

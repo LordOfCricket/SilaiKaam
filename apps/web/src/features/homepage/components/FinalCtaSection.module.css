@@ -1,0 +1,44 @@
+.section {
+  padding: var(--space-6) var(--space-6) calc(var(--space-9) + var(--space-4));
+  max-width: var(--content-max);
+  margin-inline: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stitch {
+  width: 4rem;
+  color: var(--color-thread);
+  margin-bottom: var(--space-6);
+}
+
+.eyebrow {
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-thread);
+  margin-bottom: var(--space-4);
+}
+
+.headline {
+  font-size: var(--fs-h2);
+  margin-bottom: var(--space-4);
+  max-width: 28rem;
+}
+
+.lead {
+  font-size: var(--fs-lead);
+  color: var(--color-ink-soft);
+  max-width: 32rem;
+  margin-bottom: var(--space-7);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+}
