@@ -9,6 +9,9 @@ const PROTECTED_PREFIXES = [
   '/cart',
   '/checkout',
   '/orders',
+  '/wishlist',
+  '/notifications',
+  '/support',
 ];
 const PROTECTED_PATTERNS = [/^\/marketplace\/[^/]+\/(buy|buy-fit)$/];
 const AUTH_ONLY_PAGES = ['/login', '/register'];
@@ -49,6 +52,9 @@ export const config = {
     '/cart/:path*',
     '/checkout/:path*',
     '/orders/:path*',
+    '/wishlist/:path*',
+    '/notifications/:path*',
+    '/support/:path*',
     '/marketplace/:slug/buy',
     '/marketplace/:slug/buy-fit',
     '/login',

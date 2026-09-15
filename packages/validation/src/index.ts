@@ -9,6 +9,11 @@ export * from './catalog';
 export * from './fitting-request';
 export * from './cart';
 export * from './order';
+export * from './fitting-workflow';
+export * from './review';
+export * from './support';
+export * from './cancellation';
+export * from './dispute';
 
 // Generic, domain-agnostic schemas.
 

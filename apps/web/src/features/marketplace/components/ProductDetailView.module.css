@@ -54,6 +54,14 @@
   letter-spacing: 0.03em;
 }
 
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 .name {
   font-size: 2rem;
   margin-top: var(--space-2);

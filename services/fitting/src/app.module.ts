@@ -4,6 +4,7 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ExistingGarmentModule } from './modules/existing-garment/existing-garment.module';
 import { CustomStitchingModule } from './modules/custom-stitching/custom-stitching.module';
+import { FittingWorkflowModule } from './modules/fitting-workflow/fitting-workflow.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { CustomStitchingModule } from './modules/custom-stitching/custom-stitchi
     HealthModule,
     ExistingGarmentModule,
     CustomStitchingModule,
+    FittingWorkflowModule,
   ],
 })
 export class AppModule {}

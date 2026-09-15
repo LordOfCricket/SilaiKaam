@@ -107,7 +107,7 @@ export function AddressesSection({
           onCancel={() => setMode({ kind: 'list' })}
         />
       ) : addresses.length === 0 ? (
-        <p className={cardStyles.emptyState}>No addresses saved yet.</p>
+        <p className={cardStyles.emptyState}>Add an address to make checkout faster.</p>
       ) : (
         <div className={cardStyles.list}>
           {addresses.map((address) => (

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CategoryDto, ProductListResultDto, ProductSort } from '@silaikaam/types';
 import { FormBanner } from '@/components/ui/FormBanner';
 import { ApiError, NetworkError } from '@/lib/api-client';
+import { useAuth } from '@/providers/AuthProvider';
+import { wishlistApi } from '@/features/wishlist/api';
 import { marketplaceApi } from '../api';
 import { ProductCard } from './ProductCard';
 import styles from './MarketplaceView.module.css';
@@ -33,6 +35,17 @@ export function MarketplaceView() {
 
   const [loadState, setLoadState] = useState<LoadState>({ kind: 'loading' });
   const [result, setResult] = useState<ProductListResultDto | null>(null);
+  const [savedProductIds, setSavedProductIds] = useState<Set<string>>(new Set());
+  const { status } = useAuth();
+
+  // One request for the whole grid — never a per-card wishlist lookup.
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+    wishlistApi
+      .list()
+      .then((items) => setSavedProductIds(new Set(items.map((i) => i.productId))))
+      .catch(() => {});
+  }, [status]);
 
   useEffect(() => {
     const timeout = setTimeout(() => setQ(searchInput.trim()), 400);
@@ -252,7 +265,7 @@ export function MarketplaceView() {
           <>
             <div className={styles.grid}>
               {result?.items.map((product) => (
-                <ProductCard key={product.id} product={product} />
+                <ProductCard key={product.id} product={product} initialSaved={savedProductIds.has(product.id)} />
               ))}
             </div>
             {totalPages > 1 ? (

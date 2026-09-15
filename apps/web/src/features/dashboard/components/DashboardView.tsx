@@ -27,6 +27,9 @@ const QUICK_ACTIONS: QuickAction[] = [
   { title: 'Custom Stitching', subtitle: 'Made from scratch, to order', href: '/custom-stitching' },
   { title: 'Cart', subtitle: 'Review what you’ve added', href: '/cart' },
   { title: 'My Orders', subtitle: 'Track what you’ve ordered', href: '/orders' },
+  { title: 'Wishlist', subtitle: 'Saved items for later', href: '/wishlist' },
+  { title: 'Notifications', subtitle: 'Updates on your orders', href: '/notifications' },
+  { title: 'Support', subtitle: 'Get help with an order', href: '/support' },
 ];
 
 export function DashboardView() {
@@ -196,11 +199,6 @@ export function DashboardView() {
             <Link href="/orders" className={styles.linkButton}>
               View my orders →
             </Link>
-          </div>
-
-          <div className={styles.card}>
-            <h2 className={styles.cardTitle}>Recent activity</h2>
-            <p className={styles.emptyState}>No recent activity yet.</p>
           </div>
         </div>
 

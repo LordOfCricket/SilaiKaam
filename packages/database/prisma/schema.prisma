@@ -72,10 +72,13 @@ model CustomerProfile {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  addresses   Address[]
-  fitProfiles FitProfile[]
-  cart        Cart?
-  orders      Order[]
+  addresses      Address[]
+  fitProfiles    FitProfile[]
+  cart           Cart?
+  orders         Order[]
+  wishlistItems  WishlistItem[]
+  notifications  Notification[]
+  supportTickets SupportTicket[]
 
   @@map("customer_profiles")
 }
@@ -185,8 +188,9 @@ model Product {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
-  variants  ProductVariant[]
-  cartItems CartItem[]
+  variants      ProductVariant[]
+  cartItems     CartItem[]
+  wishlistItems WishlistItem[]
 
   @@index([categoryId])
   @@map("products")
@@ -268,6 +272,8 @@ enum GarmentPhotoRole {
   BACK
   AREA
   DAMAGE
+  READY_PROOF
+  ACTION_RESPONSE
 }
 
 /// Owned by fitting-service. A customer's request to have a garment they
@@ -295,16 +301,23 @@ model ExistingGarmentRequest {
   @@map("existing_garment_requests")
 }
 
+/// `requestId` and `fittingWorkflowId` are both optional so this one model
+/// can serve garment-inspection photos (Existing Garment) AND fitting-
+/// workflow photos (ready-garment proof, customer action-required
+/// responses) without a second media table. Exactly one is set per row.
 model GarmentPhoto {
-  id         String                 @id @default(uuid())
-  requestId  String
-  request    ExistingGarmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  role       GarmentPhotoRole
-  mimeType   String
-  dataBase64 String
-  sizeBytes  Int
-  createdAt  DateTime               @default(now())
+  id                String                  @id @default(uuid())
+  requestId         String?
+  request           ExistingGarmentRequest? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  fittingWorkflowId String?
+  fittingWorkflow   FittingWorkflow?        @relation(fields: [fittingWorkflowId], references: [id], onDelete: Cascade)
+  role              GarmentPhotoRole
+  mimeType          String
+  dataBase64        String
+  sizeBytes         Int
+  createdAt         DateTime                @default(now())
 
+  @@index([fittingWorkflowId])
   @@map("garment_photos")
 }
 
@@ -427,10 +440,13 @@ enum OrderStatus {
   FITTING
   QUALITY_CHECK
   READY
+  PREPARING_FOR_DELIVERY
   OUT_FOR_DELIVERY
   DELIVERED
   COMPLETED
   CANCELLED
+  DELIVERY_FAILED
+  DELIVERY_RESCHEDULED
 }
 
 /// Owned by order-service. Created once, atomically, from a validated Cart.
@@ -453,12 +469,22 @@ model Order {
   discountTotal     Float        @default(0)
   total             Float        @default(0)
   hasUnpricedItems  Boolean      @default(false)
+  /// Set only when this order was created via a "Buy Again"/"Repeat Fit"
+  /// action — purely for customer-facing traceability. The original order
+  /// is never mutated or duplicated; this just links to it.
+  reorderedFromOrderId String?
+  reorderedFromOrder   Order?   @relation("OrderReorders", fields: [reorderedFromOrderId], references: [id])
+  reorders             Order[]  @relation("OrderReorders")
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
   items           OrderItem[]
   addressSnapshot OrderAddressSnapshot?
   statusHistory   OrderStatusHistory[]
+  reviews         Review[]
+  cancellation    OrderCancellation?
+  refunds         Refund[]
+  disputes        Dispute[]
 
   @@index([customerProfileId])
   @@map("orders")
@@ -525,6 +551,9 @@ model OrderItem {
   lineTotal Float?
   createdAt DateTime @default(now())
 
+  fittingWorkflow FittingWorkflow?
+  reviews         Review[]
+
   @@index([orderId])
   @@map("order_items")
 }
@@ -532,13 +561,395 @@ model OrderItem {
 /// Append-only — reconstructs the customer-facing timeline. Only ever
 /// written by order-service; no staff/tailor identity is ever stored here.
 model OrderStatusHistory {
-  id        String      @id @default(uuid())
-  orderId   String
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  status    OrderStatus
-  note      String?
-  createdAt DateTime    @default(now())
+  id          String      @id @default(uuid())
+  orderId     String
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      OrderStatus
+  note        String?
+  actorSource String?
+  createdAt   DateTime    @default(now())
 
   @@index([orderId])
   @@map("order_status_history")
+}
+
+enum FittingWorkflowStatus {
+  RECEIVED
+  INSPECTION
+  ACTION_REQUIRED
+  ASSIGNED
+  IN_PROGRESS
+  QC
+  REWORK_REQUIRED
+  READY
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum InspectionOutcome {
+  PASS
+  ACTION_REQUIRED
+  REJECTED
+  REWORK_REQUIRED
+}
+
+enum InspectionStage {
+  PRE_FITTING
+  QC
+}
+
+enum ActionRequestStatus {
+  PENDING
+  SUBMITTED
+  EXPIRED
+}
+
+/// Owned by fitting-service. The internal operational lifecycle for one
+/// fitting-eligible OrderItem (PRODUCT_WITH_FITTING or
+/// EXISTING_GARMENT_FITTING) — one row per item, created once at order
+/// placement and never duplicated (`orderItemId` is unique). Customer-safe
+/// status/messages are always derived from `status` via a mapping, never
+/// exposed as this internal enum directly.
+model FittingWorkflow {
+  id                String                @id @default(uuid())
+  orderId           String
+  orderItemId       String                @unique
+  orderItem         OrderItem             @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  itemType          OrderItemType
+  status            FittingWorkflowStatus @default(RECEIVED)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  statusHistory  FittingStatusHistory[]
+  inspections    FittingInspection[]
+  actionRequests FittingActionRequest[]
+  readyPhotos    GarmentPhoto[]
+
+  @@index([orderId])
+  @@index([customerProfileId])
+  @@map("fitting_workflows")
+}
+
+/// Append-only. `customerMessage` is the only text ever shown to the
+/// customer; `actorSource` records where the change came from (e.g.
+/// "SYSTEM", "STAFF") — never a staff member's identity.
+model FittingStatusHistory {
+  id                String                @id @default(uuid())
+  fittingWorkflowId String
+  fittingWorkflow   FittingWorkflow       @relation(fields: [fittingWorkflowId], references: [id], onDelete: Cascade)
+  status            FittingWorkflowStatus
+  customerMessage   String?
+  actorSource       String
+  createdAt         DateTime              @default(now())
+
+  @@index([fittingWorkflowId])
+  @@map("fitting_status_history")
+}
+
+/// `observations`/`issues` are internal-only fields — never returned by a
+/// customer-facing endpoint.
+/// `stage` distinguishes the pre-fitting garment inspection from the
+/// post-fitting QC check — same shape, same privacy rules (observations/
+/// issues never reach the customer), reused rather than duplicated.
+model FittingInspection {
+  id                     String            @id @default(uuid())
+  fittingWorkflowId      String
+  fittingWorkflow        FittingWorkflow   @relation(fields: [fittingWorkflowId], references: [id], onDelete: Cascade)
+  stage                  InspectionStage   @default(PRE_FITTING)
+  outcome                InspectionOutcome
+  garmentCondition       GarmentCondition?
+  observations           String?
+  issues                 String?
+  requiresCustomerAction Boolean           @default(false)
+  actorSource            String
+  createdAt              DateTime          @default(now())
+
+  @@index([fittingWorkflowId])
+  @@map("fitting_inspections")
+}
+
+/// `requestedInfo` is customer-safe text describing what's needed.
+model FittingActionRequest {
+  id                   String              @id @default(uuid())
+  fittingWorkflowId    String
+  fittingWorkflow      FittingWorkflow     @relation(fields: [fittingWorkflowId], references: [id], onDelete: Cascade)
+  status               ActionRequestStatus @default(PENDING)
+  requestedInfo        String
+  customerResponseText String?
+  respondedAt          DateTime?
+  expiresAt            DateTime?
+  createdAt            DateTime            @default(now())
+
+  @@index([fittingWorkflowId])
+  @@index([status])
+  @@map("fitting_action_requests")
+}
+
+enum ReviewTargetType {
+  PRODUCT
+  FITTING
+  CUSTOM_STITCHING
+}
+
+/// Owned by order-service. One row per (orderItem, targetType) — a
+/// PRODUCT_WITH_FITTING item can get both a PRODUCT review and a FITTING
+/// review. Eligibility (order completed, item actually purchased, fitting
+/// actually completed) is derived entirely server-side from Order/OrderItem
+/// /FittingWorkflow — never from client input.
+model Review {
+  id                String           @id @default(uuid())
+  customerProfileId String
+  orderId           String
+  order             Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId       String
+  orderItem         OrderItem        @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  targetType        ReviewTargetType
+  rating            Int
+  title             String?
+  comment           String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@unique([orderItemId, targetType])
+  @@index([customerProfileId])
+  @@index([orderId])
+  @@map("reviews")
+}
+
+/// Owned by user-service. A reference to the CURRENT product only — never a
+/// price/availability snapshot. If the product changes or is removed, the
+/// wishlist keeps pointing at it and the UI reflects the current (possibly
+/// unavailable) state honestly.
+model WishlistItem {
+  id                String          @id @default(uuid())
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  productId         String
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([customerProfileId, productId])
+  @@index([customerProfileId])
+  @@index([productId])
+  @@map("wishlist_items")
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_STATUS_CHANGED
+  FITTING_ACTION_REQUIRED
+  FITTING_PROGRESS
+  QC_PASSED
+  REWORK_REQUIRED
+  READY_FOR_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERY_FAILED
+  DELIVERY_RESCHEDULED
+  ORDER_DELIVERED
+  ORDER_COMPLETED
+  REVIEW_AVAILABLE
+  CANCELLATION_CONFIRMED
+  REFUND_REQUESTED
+  REFUND_PROCESSING
+  REFUND_COMPLETED
+  REFUND_FAILED
+  DISPUTE_OPENED
+  DISPUTE_UPDATED
+  DISPUTE_RESOLVED
+  REWORK_REQUESTED
+}
+
+/// Owned by user-service for the customer-facing read/list surface, but
+/// written directly by order-service/fitting-service at the meaningful
+/// event points — the same shared-DB, no-HTTP-hop precedent used
+/// throughout this app (e.g. order-service writing FittingWorkflow rows).
+/// `relatedOrderId`/`relatedOrderItemId` are plain indexed references, not
+/// FKs, matching how other cross-bounded-context ids are stored here.
+/// `dedupeKey` gives idempotent creation for free via its unique index.
+model Notification {
+  id                 String           @id @default(uuid())
+  customerProfileId  String
+  customerProfile    CustomerProfile  @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  type               NotificationType
+  title              String
+  message            String
+  relatedOrderId     String?
+  relatedOrderItemId String?
+  dedupeKey          String           @unique
+  isRead             Boolean          @default(false)
+  readAt             DateTime?
+  createdAt          DateTime         @default(now())
+
+  @@index([customerProfileId, createdAt])
+  @@index([customerProfileId, isRead])
+  @@map("notifications")
+}
+
+enum SupportCategory {
+  ORDER
+  FITTING
+  DELIVERY
+  PRODUCT
+  ACCOUNT
+  OTHER
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportSenderType {
+  CUSTOMER
+  SUPPORT
+}
+
+/// `orderId` is a plain indexed reference (validated against order-service's
+/// Order table at write time, same shared-DB precedent as elsewhere) — not
+/// an FK, since Support and Order are different bounded contexts.
+model SupportTicket {
+  id                String              @id @default(uuid())
+  customerProfileId String
+  customerProfile   CustomerProfile     @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  orderId           String?
+  category          SupportCategory
+  subject           String
+  description       String
+  status            SupportTicketStatus @default(OPEN)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  closedAt          DateTime?
+
+  messages SupportMessage[]
+
+  @@index([customerProfileId, status])
+  @@index([customerProfileId, createdAt])
+  @@index([orderId])
+  @@map("support_tickets")
+}
+
+/// `senderType` is all the UI ever shows for SUPPORT messages — no staff
+/// identity is ever stored or exposed.
+model SupportMessage {
+  id         String            @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderType SupportSenderType
+  message    String
+  createdAt  DateTime          @default(now())
+
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+enum CancellationReason {
+  CUSTOMER_CHANGED_MIND
+  ORDERED_BY_MISTAKE
+  DELIVERY_TOO_LATE
+  WRONG_ITEM
+  OTHER
+}
+
+/// Owned by order-service. Order-level only (V1 policy — see
+/// CancellationService: an Order is created/decremented as one atomic
+/// unit, so partial/item cancellation would need a larger redesign).
+/// `orderId` is unique — at most one cancellation per order, which is also
+/// the idempotency guard against a duplicate/racing request.
+model OrderCancellation {
+  id                String             @id @default(uuid())
+  orderId           String             @unique
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customerProfileId String
+  reason            CancellationReason
+  note              String?
+  createdAt         DateTime           @default(now())
+
+  @@index([customerProfileId])
+  @@map("order_cancellations")
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+/// Owned by order-service. Records what SHOULD be refunded — no real
+/// payment provider exists yet, so `status` only ever reaches PENDING from
+/// customer-facing flows in this batch; PROCESSING/SUCCEEDED/FAILED exist
+/// so the model is complete once a real provider is wired in, and are only
+/// reachable via the internal ops endpoint (never a customer action).
+/// `sourceCancellationId`/`sourceDisputeId` are unique — at most one refund
+/// per triggering event, which is the idempotency guard.
+model Refund {
+  id                    String       @id @default(uuid())
+  orderId               String
+  order                 Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId           String?
+  customerProfileId     String
+  amount                Decimal      @db.Decimal(10, 2)
+  currency              String       @default("INR")
+  reason                String
+  status                RefundStatus @default(PENDING)
+  sourceCancellationId  String?      @unique
+  sourceDisputeId       String?      @unique
+  externalReference     String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  processedAt           DateTime?
+
+  @@index([customerProfileId])
+  @@index([orderId])
+  @@map("refunds")
+}
+
+enum DisputeType {
+  FIT_ISSUE
+  DAMAGED_ITEM
+  WRONG_ITEM
+  MISSING_ITEM
+  QUALITY_ISSUE
+  DELIVERY_ISSUE
+  OTHER
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  ACTION_REQUIRED
+  RESOLVED
+  REJECTED
+  CLOSED
+}
+
+/// Owned by order-service. Structured business data distinct from
+/// SupportTicket (communication) — customers discuss a dispute through the
+/// existing Support system rather than a duplicated messaging model.
+/// `resolution` is customer-safe summary text only; no internal notes.
+model Dispute {
+  id                String        @id @default(uuid())
+  customerProfileId String
+  orderId           String
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId       String?
+  type              DisputeType
+  description       String
+  status            DisputeStatus @default(OPEN)
+  resolution        String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  resolvedAt        DateTime?
+
+  @@index([customerProfileId])
+  @@index([orderId])
+  @@index([status])
+  @@map("disputes")
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { primaryNavLinks } from '@/features/homepage/data/navigation';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/providers/AuthProvider';
+import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 import { MobileMenu } from './MobileMenu';
 import styles from './Navbar.module.css';
 
@@ -41,12 +42,16 @@ export function Navbar() {
               <Link href="/cart" className={styles.link}>
                 Cart
               </Link>
+              <Link href="/wishlist" className={styles.link}>
+                Wishlist
+              </Link>
               <Link href="/orders" className={styles.link}>
                 My Orders
               </Link>
               <Link href="/dashboard" className={styles.link}>
                 Dashboard
               </Link>
+              <NotificationBell />
             </>
           ) : status === 'unauthenticated' ? (
             <Link href="/login" className={styles.link}>

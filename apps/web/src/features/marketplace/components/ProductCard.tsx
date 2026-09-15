@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ProductSummaryDto } from '@silaikaam/types';
+import { SaveButton } from '@/features/wishlist/components/SaveButton';
 import styles from './ProductCard.module.css';
 
 function formatPrice(amount: number, currency: string): string {
@@ -10,7 +11,13 @@ function formatPrice(amount: number, currency: string): string {
   }).format(amount);
 }
 
-export function ProductCard({ product }: { product: ProductSummaryDto }) {
+export function ProductCard({
+  product,
+  initialSaved = false,
+}: {
+  product: ProductSummaryDto;
+  initialSaved?: boolean;
+}) {
   const hasDiscount = product.discountPrice !== null && product.discountPrice < product.price;
   const discountPercent = hasDiscount
     ? Math.round(((product.price - product.discountPrice!) / product.price) * 100)
@@ -23,6 +30,9 @@ export function ProductCard({ product }: { product: ProductSummaryDto }) {
       aria-label={`View ${product.name}`}
     >
       <div className={styles.visual}>
+        <div className={styles.saveButtonSlot}>
+          <SaveButton productId={product.id} initialSaved={initialSaved} />
+        </div>
         {product.availability !== 'IN_STOCK' ? (
           <span className={`${styles.badge} ${styles.badgeOut}`}>
             {product.availability === 'OUT_OF_STOCK' ? 'Out of stock' : 'Preorder'}

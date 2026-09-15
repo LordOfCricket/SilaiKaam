@@ -4,6 +4,9 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { FitProfileModule } from './modules/fit-profile/fit-profile.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -14,6 +17,9 @@ import { FitProfileModule } from './modules/fit-profile/fit-profile.module';
     HealthModule,
     CustomersModule,
     FitProfileModule,
+    WishlistModule,
+    NotificationsModule,
+    SupportModule,
   ],
 })
 export class AppModule {}

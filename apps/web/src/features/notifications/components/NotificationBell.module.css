@@ -1,0 +1,127 @@
+.container {
+  position: relative;
+}
+
+.bell {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  position: relative;
+  padding: 0.3rem;
+  color: var(--color-ink);
+}
+
+.bell:focus-visible {
+  outline: 2px solid var(--color-thread);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.badge {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  background: var(--color-thread);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  min-width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.2rem;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 20rem;
+  max-width: 90vw;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+  font-weight: 700;
+  font-size: var(--fs-small);
+}
+
+.viewAll {
+  font-weight: 600;
+  color: var(--color-thread);
+  text-decoration: none;
+}
+
+.list {
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+
+.item {
+  border-bottom: 1px solid var(--color-line);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.itemLink,
+.itemButton {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+}
+
+.itemLink:hover,
+.itemButton:hover {
+  background: var(--color-canvas);
+}
+
+.unread {
+  background: rgba(166, 67, 44, 0.05);
+}
+
+.itemTitle {
+  font-weight: 700;
+  font-size: var(--fs-small);
+}
+
+.itemMessage {
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
+  margin-top: 0.15rem;
+}
+
+.itemTime {
+  font-size: 0.7rem;
+  color: var(--color-ink-faint);
+  margin-top: 0.25rem;
+  display: block;
+}
+
+.empty {
+  padding: var(--space-5);
+  text-align: center;
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
+}

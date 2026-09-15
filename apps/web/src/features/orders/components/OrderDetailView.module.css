@@ -27,6 +27,39 @@
 .placedOn {
   font-size: var(--fs-small);
   color: var(--color-ink-faint);
+  display: block;
+  margin-top: var(--space-1);
+}
+
+.headerActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.refreshButton {
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.9rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-ink);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.refreshButton:hover {
+  border-color: var(--color-thread);
+  color: var(--color-thread);
+}
+
+.statusMessage {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--color-ink);
 }
 
 .section {
@@ -87,6 +120,7 @@
 .item {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-4);
   border-bottom: 1px solid var(--color-line);
   padding-bottom: var(--space-3);
@@ -106,6 +140,15 @@
   margin-bottom: var(--space-1);
 }
 
+.status {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+}
+
 .itemName {
   font-weight: 600;
 }
@@ -119,6 +162,155 @@
 .itemPrice {
   font-weight: 700;
   white-space: nowrap;
+}
+
+.fittingMessage {
+  font-size: var(--fs-small);
+  color: var(--color-ink);
+  margin-top: var(--space-2);
+  font-weight: 600;
+}
+
+.actionRequired {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-thread);
+  border-radius: var(--radius-sm);
+  background: rgba(166, 67, 44, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 26rem;
+}
+
+.actionTitle {
+  font-weight: 700;
+  color: var(--color-thread);
+  font-size: var(--fs-small);
+}
+
+.actionInfo {
+  font-size: var(--fs-small);
+}
+
+.actionLabel {
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.actionTextarea {
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  resize: vertical;
+}
+
+.actionDone {
+  margin-top: var(--space-3);
+  font-size: var(--fs-small);
+  color: var(--color-thread);
+  font-weight: 600;
+}
+
+.postOrderActions {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-line);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.reviewCta {
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.9rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.reviewCta:hover {
+  border-color: var(--color-thread);
+  color: var(--color-thread);
+}
+
+.reviewForm {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 26rem;
+  width: 100%;
+}
+
+.reviewDone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-small);
+}
+
+.reviewStars {
+  color: var(--color-thread);
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+}
+
+.starRow {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.star {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--color-line-strong);
+  cursor: pointer;
+  padding: 0.15rem;
+}
+
+.star:focus-visible {
+  outline: 2px solid var(--color-thread);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.starFilled {
+  color: var(--color-thread);
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--color-thread);
+  cursor: pointer;
+  text-decoration: underline;
+  align-self: flex-start;
+}
+
+.reorderRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.reorderUnavailable {
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
 }
 
 .address {

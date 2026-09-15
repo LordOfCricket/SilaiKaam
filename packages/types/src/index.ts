@@ -8,6 +8,14 @@ export * from './catalog';
 export * from './fitting-request';
 export * from './cart';
 export * from './order';
+export * from './fitting-workflow';
+export * from './review';
+export * from './wishlist';
+export * from './notification';
+export * from './support';
+export * from './cancellation';
+export * from './refund';
+export * from './dispute';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

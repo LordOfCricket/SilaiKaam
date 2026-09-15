@@ -1,9 +1,32 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@silaikaam/database';
-import type { CartItemType, OrderDetailDto, OrderItemType, OrderStatus, OrderSummaryDto } from '@silaikaam/types';
+import {
+  FITTING_CUSTOMER_MESSAGE,
+  FITTING_CUSTOMER_STATUS,
+  NOTIFICATION_TITLE,
+  type CartItemType,
+  type FittingProgressDto,
+  type NotificationType,
+  type OrderDetailDto,
+  type OrderItemType,
+  type OrderStatus,
+  type OrderSummaryDto,
+  type ReorderInfoDto,
+  type ReviewDto,
+  type ReviewTargetType,
+  type ReviewableTargetDto,
+} from '@silaikaam/types';
 import { CartService } from '../cart/cart.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CancellationService } from './cancellation.service';
 import { PlaceOrderDto } from './dto/place-order.dto';
+import { RespondActionRequestDto } from './dto/respond-action-request.dto';
+import { ORDER_STATUS_MESSAGE } from './status-messages';
+
+// Item types that get a fitting workflow at all — PRODUCT_ONLY and
+// CUSTOM_STITCHING never do (see Phase 16/18: "no fitting workflow" /
+// "do not incorrectly label custom stitching as standard fitting").
+const FITTING_ELIGIBLE_TYPES: OrderItemType[] = ['PRODUCT_WITH_FITTING', 'EXISTING_GARMENT_FITTING'];
 
 const PRISMA_UNIQUE_CONSTRAINT_VIOLATION = 'P2002';
 
@@ -20,26 +43,35 @@ const CART_TO_ORDER_TYPE: Record<CartItemType, OrderItemType> = {
 };
 
 const TIMELINE_BY_TYPE: Record<OrderItemType, OrderStatus[]> = {
-  PRODUCT_ONLY: ['PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED'],
+  PRODUCT_ONLY: [
+    'PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'PREPARING_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+  ],
   PRODUCT_WITH_FITTING: [
-    'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+    'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY', 'PREPARING_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
   ],
   EXISTING_GARMENT_FITTING: [
-    'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+    'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY', 'PREPARING_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
   ],
+  // No FittingWorkflow exists for custom stitching (there is no production/QC
+  // model for it yet) — its timeline must not borrow the fitting QC step.
   CUSTOM_STITCHING: [
-    'PLACED', 'CONFIRMED', 'PREPARING', 'QUALITY_CHECK', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+    'PLACED', 'CONFIRMED', 'PREPARING', 'READY', 'PREPARING_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
   ],
 };
 const STATUS_ORDER: OrderStatus[] = [
-  'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
+  'PLACED', 'CONFIRMED', 'PREPARING', 'FITTING', 'QUALITY_CHECK', 'READY',
+  'PREPARING_FOR_DELIVERY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
 ];
+// Branch/side-states — never part of the forward-only timeline (same
+// treatment as CANCELLED), surfaced instead via `statusMessage`.
+const SIDE_STATES: OrderStatus[] = ['CANCELLED', 'DELIVERY_FAILED', 'DELIVERY_RESCHEDULED'];
 
 @Injectable()
 export class OrdersService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(CartService) private readonly cartService: CartService,
+    @Inject(CancellationService) private readonly cancellationService: CancellationService,
   ) {}
 
   async placeOrder(userId: string, dto: PlaceOrderDto) {
@@ -128,14 +160,42 @@ export class OrdersService {
                 country: address.country,
               },
             },
-            statusHistory: { create: { status: 'PLACED' } },
+            statusHistory: { create: { status: 'PLACED', note: ORDER_STATUS_MESSAGE.PLACED } },
           },
+          include: { items: true },
         });
 
+        for (const item of order.items) {
+          if (!FITTING_ELIGIBLE_TYPES.includes(item.type)) continue;
+          const workflow = await tx.fittingWorkflow.create({
+            data: {
+              orderId: order.id,
+              orderItemId: item.id,
+              customerProfileId: profile.id,
+              itemType: item.type,
+            },
+          });
+          await tx.fittingStatusHistory.create({
+            data: {
+              fittingWorkflowId: workflow.id,
+              status: 'RECEIVED',
+              customerMessage: FITTING_CUSTOMER_MESSAGE.RECEIVED,
+              actorSource: 'SYSTEM',
+            },
+          });
+        }
 
         await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
 
         return order.id;
+      });
+
+      await this.notifyBestEffort({
+        customerProfileId: profile.id,
+        type: 'ORDER_PLACED',
+        message: ORDER_STATUS_MESSAGE.PLACED,
+        relatedOrderId: orderId,
+        dedupeKey: `ORDER_PLACED:${orderId}`,
       });
 
       return { order: await this.toOrderDetail(orderId), created: true };
@@ -278,8 +338,39 @@ export class OrdersService {
 
     const relevantTypes = new Set(order.items.map((i) => i.type));
     const timelineSteps = STATUS_ORDER.filter(
-      (status) => status !== 'CANCELLED' && [...relevantTypes].some((t) => TIMELINE_BY_TYPE[t].includes(status)),
+      (status) => !SIDE_STATES.includes(status) && [...relevantTypes].some((t) => TIMELINE_BY_TYPE[t].includes(status)),
     );
+
+    const workflows = await this.prisma.client.fittingWorkflow.findMany({
+      where: { orderId: order.id },
+      include: { actionRequests: { where: { status: 'PENDING' }, orderBy: { createdAt: 'desc' }, take: 1 } },
+    });
+    const workflowByItemId = new Map(workflows.map((w) => [w.orderItemId, w]));
+
+    const isCompleted = order.status === 'COMPLETED';
+    const existingReviews = isCompleted
+      ? await this.prisma.client.review.findMany({ where: { orderId: order.id } })
+      : [];
+    const reorderInfoByItemId = new Map(
+      isCompleted
+        ? await Promise.all(
+            order.items.map(async (item) => [item.id, await this.computeReorderInfo(item)] as const),
+          )
+        : [],
+    );
+
+    const lastForward = [...order.statusHistory].reverse().find((h) => timelineSteps.includes(h.status));
+    const currentStepIndex = lastForward
+      ? timelineSteps.indexOf(lastForward.status)
+      : Math.max(timelineSteps.indexOf(order.status), 0);
+    const lastHistoryNote = order.statusHistory[order.statusHistory.length - 1]?.note;
+    const statusMessage = lastHistoryNote ?? ORDER_STATUS_MESSAGE[order.status];
+
+    const [cancellationRow, refundRows, disputeRows] = await Promise.all([
+      this.prisma.client.orderCancellation.findUnique({ where: { orderId: order.id } }),
+      this.prisma.client.refund.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'asc' } }),
+      this.prisma.client.dispute.findMany({ where: { orderId: order.id }, orderBy: { createdAt: 'desc' } }),
+    ]);
 
     return {
       id: order.id,
@@ -316,6 +407,9 @@ export class OrdersService {
             ? { garmentType: item.garmentType ?? '', fabricDetails: item.fabricDetails, designDetails: item.designDetails }
             : null,
         lineTotal: item.lineTotal,
+        fitting: this.toFittingProgress(workflowByItemId.get(item.id)),
+        reviewableTargets: isCompleted ? this.buildReviewableTargets(item, existingReviews) : [],
+        reorder: reorderInfoByItemId.get(item.id) ?? null,
       })),
       address: {
         label: order.addressSnapshot?.label ?? null,
@@ -332,8 +426,215 @@ export class OrdersService {
         createdAt: h.createdAt.toISOString(),
       })),
       timelineSteps,
+      currentStepIndex,
+      statusMessage,
       createdAt: order.createdAt.toISOString(),
+      cancellationEligibility: this.cancellationService.getEligibility(order.status),
+      cancellation: cancellationRow
+        ? {
+            id: cancellationRow.id,
+            orderId: cancellationRow.orderId,
+            reason: cancellationRow.reason,
+            note: cancellationRow.note,
+            createdAt: cancellationRow.createdAt.toISOString(),
+          }
+        : null,
+      refunds: refundRows.map((r) => ({
+        id: r.id,
+        orderId: r.orderId,
+        orderItemId: r.orderItemId,
+        amount: Number(r.amount.toString()),
+        currency: r.currency,
+        reason: r.reason,
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
+        updatedAt: r.updatedAt.toISOString(),
+        processedAt: r.processedAt ? r.processedAt.toISOString() : null,
+      })),
+      disputes: disputeRows.map((d) => ({
+        id: d.id,
+        orderId: d.orderId,
+        orderItemId: d.orderItemId,
+        type: d.type,
+        description: d.description,
+        status: d.status,
+        resolution: d.resolution,
+        createdAt: d.createdAt.toISOString(),
+        updatedAt: d.updatedAt.toISOString(),
+        resolvedAt: d.resolvedAt ? d.resolvedAt.toISOString() : null,
+      })),
     };
+  }
+
+  /** Customer submits the info/response an inspection asked for. Ownership
+   * is checked end-to-end: order -> customer, action request -> this
+   * order's fitting workflow. Re-submitting an already-answered request is
+   * rejected rather than silently overwritten (auditability). */
+  async respondToActionRequest(userId: string, orderId: string, actionRequestId: string, dto: RespondActionRequestDto) {
+    const profile = await this.findCustomerProfileOrThrow(userId);
+    const order = await this.prisma.client.order.findUnique({ where: { id: orderId } });
+    if (!order || order.customerProfileId !== profile.id) {
+      throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found.' });
+    }
+
+    const actionRequest = await this.prisma.client.fittingActionRequest.findUnique({
+      where: { id: actionRequestId },
+      include: { fittingWorkflow: true },
+    });
+    if (!actionRequest || actionRequest.fittingWorkflow.orderId !== orderId) {
+      throw new NotFoundException({ code: 'ACTION_REQUEST_NOT_FOUND', message: 'This request was not found.' });
+    }
+    if (actionRequest.status !== 'PENDING') {
+      throw new BadRequestException({
+        code: 'ACTION_REQUEST_ALREADY_HANDLED',
+        message: 'This request has already been responded to.',
+      });
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.fittingActionRequest.update({
+        where: { id: actionRequestId },
+        data: { status: 'SUBMITTED', customerResponseText: dto.responseText, respondedAt: new Date() },
+      });
+      await tx.fittingWorkflow.update({
+        where: { id: actionRequest.fittingWorkflowId },
+        data: { status: 'INSPECTION' },
+      });
+      await tx.fittingStatusHistory.create({
+        data: {
+          fittingWorkflowId: actionRequest.fittingWorkflowId,
+          status: 'INSPECTION',
+          customerMessage: FITTING_CUSTOMER_MESSAGE.INSPECTION,
+          actorSource: 'SYSTEM',
+        },
+      });
+    });
+
+    return { status: 'SUBMITTED' as const, message: "Thanks — we've received your response and will continue shortly." };
+  }
+
+  private buildReviewableTargets(
+    item: { id: string; type: OrderItemType },
+    existingReviews: {
+      id: string;
+      orderId: string;
+      orderItemId: string;
+      targetType: ReviewTargetType;
+      rating: number;
+      title: string | null;
+      comment: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+    }[],
+  ): ReviewableTargetDto[] {
+    const targets: ReviewTargetType[] = [];
+    if (item.type === 'PRODUCT_ONLY' || item.type === 'PRODUCT_WITH_FITTING') targets.push('PRODUCT');
+    if (item.type === 'PRODUCT_WITH_FITTING' || item.type === 'EXISTING_GARMENT_FITTING') targets.push('FITTING');
+    if (item.type === 'CUSTOM_STITCHING') targets.push('CUSTOM_STITCHING');
+
+    return targets.map((targetType) => ({
+      targetType,
+      existingReview: this.toReviewDto(
+        existingReviews.find((r) => r.orderItemId === item.id && r.targetType === targetType),
+      ),
+    }));
+  }
+
+  private toReviewDto(review: {
+    id: string;
+    orderId: string;
+    orderItemId: string;
+    targetType: ReviewTargetType;
+    rating: number;
+    title: string | null;
+    comment: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | undefined): ReviewDto | null {
+    if (!review) return null;
+    return {
+      id: review.id,
+      orderId: review.orderId,
+      orderItemId: review.orderItemId,
+      targetType: review.targetType,
+      rating: review.rating,
+      title: review.title,
+      comment: review.comment,
+      createdAt: review.createdAt.toISOString(),
+      updatedAt: review.updatedAt.toISOString(),
+    };
+  }
+
+  /** Live-checked "Buy Again" eligibility for a completed order's item —
+   * never trusts the historical snapshot for price/availability. */
+  private async computeReorderInfo(item: {
+    id: string;
+    type: OrderItemType;
+    productId: string | null;
+    variantId: string | null;
+  }): Promise<ReorderInfoDto | null> {
+    if (item.type !== 'PRODUCT_ONLY' && item.type !== 'PRODUCT_WITH_FITTING') return null;
+    if (!item.productId) return { eligible: false, reason: 'This item is no longer available.', currentPrice: null };
+
+    const product = await this.prisma.client.product.findUnique({ where: { id: item.productId } });
+    if (!product || !product.isActive) {
+      return { eligible: false, reason: 'This item is no longer available.', currentPrice: null };
+    }
+
+    let currentPrice = product.discountPrice ?? product.price;
+    if (item.variantId) {
+      const variant = await this.prisma.client.productVariant.findUnique({ where: { id: item.variantId } });
+      if (!variant || !variant.isActive) {
+        return { eligible: false, reason: 'This item is no longer available.', currentPrice: null };
+      }
+      if (variant.stock <= 0) {
+        return { eligible: false, reason: 'This item is currently out of stock.', currentPrice: null };
+      }
+      currentPrice = variant.price ?? currentPrice;
+    }
+
+    return { eligible: true, reason: null, currentPrice };
+  }
+
+  private toFittingProgress(
+    workflow:
+      | { status: keyof typeof FITTING_CUSTOMER_STATUS; actionRequests: { id: string; requestedInfo: string }[] }
+      | undefined,
+  ): FittingProgressDto | null {
+    if (!workflow) return null;
+    const actionRequired = workflow.actionRequests[0]
+      ? { id: workflow.actionRequests[0].id, requestedInfo: workflow.actionRequests[0].requestedInfo }
+      : null;
+    return {
+      status: FITTING_CUSTOMER_STATUS[workflow.status],
+      message: FITTING_CUSTOMER_MESSAGE[workflow.status],
+      actionRequired,
+    };
+  }
+
+  /** Best-effort — must never break an order operation that already
+   * succeeded. `dedupeKey`'s unique index gives idempotency for free. */
+  private async notifyBestEffort(input: {
+    customerProfileId: string;
+    type: NotificationType;
+    message: string;
+    relatedOrderId?: string;
+    dedupeKey: string;
+  }) {
+    try {
+      await this.prisma.client.notification.create({
+        data: {
+          customerProfileId: input.customerProfileId,
+          type: input.type,
+          title: NOTIFICATION_TITLE[input.type],
+          message: input.message,
+          relatedOrderId: input.relatedOrderId ?? null,
+          dedupeKey: input.dedupeKey,
+        },
+      });
+    } catch {
+      // Duplicate or transient failure — never block a successful order op.
+    }
   }
 
   private async findCustomerProfileOrThrow(userId: string) {

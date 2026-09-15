@@ -3,6 +3,7 @@ import { Prisma } from '@silaikaam/database';
 import { randomUUID } from 'node:crypto';
 import { CartService } from '../cart/cart.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CancellationService } from './cancellation.service';
 import { OrdersService } from './orders.service';
 
 const CUSTOMER_PROFILE_ID = 'profile-1';
@@ -61,6 +62,13 @@ function buildDb() {
       { id: 'csr-1', customerProfileId: CUSTOMER_PROFILE_ID, garmentType: 'Kurta', fabricDetails: 'Cotton', designDetails: 'Simple', fitProfileId: null, notes: null },
     ] as Record<string, unknown>[],
     orders: [] as Record<string, unknown>[],
+    fittingWorkflows: [] as Record<string, unknown>[],
+    fittingStatusHistory: [] as Record<string, unknown>[],
+    fittingActionRequests: [] as Record<string, unknown>[],
+    reviews: [] as Record<string, unknown>[],
+    orderCancellations: [] as Record<string, unknown>[],
+    refunds: [] as Record<string, unknown>[],
+    disputes: [] as Record<string, unknown>[],
   };
 }
 
@@ -216,8 +224,83 @@ function buildPrismaMock(db: ReturnType<typeof buildDb>) {
         db.orders.push(order);
         return Promise.resolve(order);
       }),
+      update: jest.fn(({ where: { id }, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const order = db.orders.find((o) => o.id === id)!;
+        Object.assign(order, data);
+        return Promise.resolve(order);
+      }),
     },
-    $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(client)),
+    fittingWorkflow: {
+      create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        const row = { id: randomUUID(), status: 'RECEIVED', createdAt: new Date(), updatedAt: new Date(), ...data };
+        db.fittingWorkflows.push(row);
+        return Promise.resolve(row);
+      }),
+      findUnique: jest.fn(({ where: { id } }: { where: { id: string } }) =>
+        Promise.resolve(db.fittingWorkflows.find((w) => w.id === id) ?? null),
+      ),
+      findMany: jest.fn(({ where: { orderId } }: { where: { orderId: string } }) =>
+        Promise.resolve(
+          db.fittingWorkflows
+            .filter((w) => w.orderId === orderId)
+            .map((w) => ({
+              ...w,
+              actionRequests: db.fittingActionRequests.filter(
+                (a) => a.fittingWorkflowId === w.id && a.status === 'PENDING',
+              ),
+            })),
+        ),
+      ),
+      update: jest.fn(({ where: { id }, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = db.fittingWorkflows.find((w) => w.id === id)!;
+        Object.assign(row, data);
+        return Promise.resolve(row);
+      }),
+    },
+    fittingStatusHistory: {
+      create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
+        const row = { id: randomUUID(), createdAt: new Date(), ...data };
+        db.fittingStatusHistory.push(row);
+        return Promise.resolve(row);
+      }),
+    },
+    fittingActionRequest: {
+      findUnique: jest.fn(({ where: { id } }: { where: { id: string } }) => {
+        const row = db.fittingActionRequests.find((a) => a.id === id);
+        if (!row) return Promise.resolve(null);
+        const workflow = db.fittingWorkflows.find((w) => w.id === row.fittingWorkflowId);
+        return Promise.resolve({ ...row, fittingWorkflow: workflow });
+      }),
+      update: jest.fn(({ where: { id }, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = db.fittingActionRequests.find((a) => a.id === id)!;
+        Object.assign(row, data);
+        return Promise.resolve(row);
+      }),
+    },
+    review: {
+      findMany: jest.fn(({ where: { orderId } }: { where: { orderId: string } }) =>
+        Promise.resolve(db.reviews.filter((r) => r.orderId === orderId)),
+      ),
+    },
+    orderCancellation: {
+      findUnique: jest.fn(({ where: { orderId } }: { where: { orderId: string } }) =>
+        Promise.resolve(db.orderCancellations.find((c) => c.orderId === orderId) ?? null),
+      ),
+    },
+    refund: {
+      findMany: jest.fn(({ where: { orderId } }: { where: { orderId: string } }) =>
+        Promise.resolve(db.refunds.filter((r) => r.orderId === orderId)),
+      ),
+    },
+    dispute: {
+      findMany: jest.fn(({ where: { orderId } }: { where: { orderId: string } }) =>
+        Promise.resolve(db.disputes.filter((d) => d.orderId === orderId)),
+      ),
+    },
+    $transaction: jest.fn((arg: unknown) => {
+      if (Array.isArray(arg)) return Promise.all(arg);
+      return (arg as (tx: unknown) => Promise<unknown>)(client);
+    }),
   };
 
   return { client } as unknown as PrismaService;
@@ -226,7 +309,8 @@ function buildPrismaMock(db: ReturnType<typeof buildDb>) {
 function buildServices(db: ReturnType<typeof buildDb>) {
   const prisma = buildPrismaMock(db);
   const cartService = new CartService(prisma);
-  const ordersService = new OrdersService(prisma, cartService);
+  const cancellationService = new CancellationService(prisma);
+  const ordersService = new OrdersService(prisma, cartService, cancellationService);
   return { cartService, ordersService };
 }
 
@@ -333,6 +417,24 @@ describe('OrdersService', () => {
     expect(order.items[0]!.type).toBe('CUSTOM_STITCHING');
     expect(order.hasUnpricedItems).toBe(true);
     expect(order.items[0]!.lineTotal).toBeNull();
+    expect(order.timelineSteps).not.toContain('QUALITY_CHECK');
+    expect(order.timelineSteps).toContain('PREPARING_FOR_DELIVERY');
+  });
+
+  it('exposes a customer-safe statusMessage and currentStepIndex on order detail', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'PRODUCT_ONLY',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+
+    expect(order.statusMessage).toEqual(expect.any(String));
+    expect(order.currentStepIndex).toBe(order.timelineSteps.indexOf('PLACED'));
   });
 
   it('produces a PRODUCT_WITH_FITTING order for a Buy + Fit checkout', async () => {
@@ -417,5 +519,144 @@ describe('OrdersService', () => {
     await expect(
       ordersService.placeOrder('user-2', { addressId: 'addr-1', idempotencyKey: key }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('creates a fitting workflow for a PRODUCT_WITH_FITTING item and exposes it on order detail', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'BUY_FIT',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+      fitProfileId: 'fp-1',
+      selectedFittingServiceIds: ['fs-1'],
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+
+    expect(db.fittingWorkflows).toHaveLength(1);
+    expect(db.fittingWorkflows[0]!.status).toBe('RECEIVED');
+    expect(order.items[0]!.fitting).toEqual({
+      status: 'PREPARING',
+      message: expect.any(String),
+      actionRequired: null,
+    });
+  });
+
+  it('does not create a fitting workflow for PRODUCT_ONLY', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'PRODUCT_ONLY',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+
+    expect(db.fittingWorkflows).toHaveLength(0);
+    expect(order.items[0]!.fitting).toBeNull();
+  });
+
+  it('lets the owning customer respond to a pending action request', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'BUY_FIT',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+      fitProfileId: 'fp-1',
+      selectedFittingServiceIds: ['fs-1'],
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+    const workflowId = db.fittingWorkflows[0]!.id as string;
+    db.fittingActionRequests.push({
+      id: 'ar-1',
+      fittingWorkflowId: workflowId,
+      status: 'PENDING',
+      requestedInfo: 'Please confirm your sleeve length.',
+    });
+    Object.assign(db.fittingWorkflows[0]!, { status: 'ACTION_REQUIRED' });
+
+    const result = await ordersService.respondToActionRequest('user-1', order.id, 'ar-1', {
+      responseText: '24 inches',
+    } as never);
+
+    expect(result.status).toBe('SUBMITTED');
+    expect(db.fittingActionRequests[0]!.status).toBe('SUBMITTED');
+    expect(db.fittingWorkflows[0]!.status).toBe('INSPECTION');
+  });
+
+  it("rejects responding to another customer's action request", async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'BUY_FIT',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+      fitProfileId: 'fp-1',
+      selectedFittingServiceIds: ['fs-1'],
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+    const workflowId = db.fittingWorkflows[0]!.id as string;
+    db.fittingActionRequests.push({ id: 'ar-1', fittingWorkflowId: workflowId, status: 'PENDING', requestedInfo: 'x' });
+
+    await expect(
+      ordersService.respondToActionRequest('user-2', order.id, 'ar-1', { responseText: 'hi' } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects submitting a response twice to the same action request', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'BUY_FIT',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+      fitProfileId: 'fp-1',
+      selectedFittingServiceIds: ['fs-1'],
+    } as never);
+    const { order } = await ordersService.placeOrder('user-1', { addressId: 'addr-1', idempotencyKey: randomUUID() });
+    const workflowId = db.fittingWorkflows[0]!.id as string;
+    db.fittingActionRequests.push({ id: 'ar-1', fittingWorkflowId: workflowId, status: 'PENDING', requestedInfo: 'x' });
+
+    await ordersService.respondToActionRequest('user-1', order.id, 'ar-1', { responseText: 'first' } as never);
+    await expect(
+      ordersService.respondToActionRequest('user-1', order.id, 'ar-1', { responseText: 'second' } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('exposes reviewableTargets and live reorder info only once an order is COMPLETED', async () => {
+    const db = buildDb();
+    const { cartService, ordersService } = buildServices(db);
+
+    await cartService.addItem('user-1', {
+      type: 'PRODUCT_ONLY',
+      productId: 'product-1',
+      variantId: 'variant-1',
+      quantity: 1,
+    } as never);
+    const { order: placedOrder } = await ordersService.placeOrder('user-1', {
+      addressId: 'addr-1',
+      idempotencyKey: randomUUID(),
+    });
+
+    // Not completed yet — no review/reorder info should be exposed.
+    expect(placedOrder.items[0]!.reviewableTargets).toEqual([]);
+    expect(placedOrder.items[0]!.reorder).toBeNull();
+
+    db.orders.find((o) => o.id === placedOrder.id)!.status = 'COMPLETED';
+    const completed = await ordersService.getOrder('user-1', placedOrder.id);
+
+    expect(completed.items[0]!.reviewableTargets).toEqual([{ targetType: 'PRODUCT', existingReview: null }]);
+    expect(completed.items[0]!.reorder).toEqual({ eligible: true, reason: null, currentPrice: 1000 });
   });
 });

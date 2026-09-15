@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import type { OrderSummaryDto } from '@silaikaam/types';
+import { ORDER_STATUS_LABEL, type OrderSummaryDto } from '@silaikaam/types';
 import { Button } from '@/components/ui/Button';
 import { FormBanner } from '@/components/ui/FormBanner';
 import { ApiError, NetworkError } from '@/lib/api-client';
@@ -69,7 +69,7 @@ export function OrdersListView() {
 
         {orders.length === 0 ? (
           <div className={styles.emptyState}>
-            <p>You haven&apos;t placed any orders yet.</p>
+            <p>Your orders will appear here.</p>
             <Button href="/marketplace">Browse the marketplace</Button>
           </div>
         ) : (
@@ -84,7 +84,7 @@ export function OrdersListView() {
                   </p>
                 </div>
                 <div className={styles.orderRight}>
-                  <span className={styles.status}>{order.status}</span>
+                  <span className={styles.status}>{ORDER_STATUS_LABEL[order.status]}</span>
                   <span className={styles.total}>
                     {order.hasUnpricedItems ? `${formatPrice(order.total)}+` : formatPrice(order.total)}
                   </span>

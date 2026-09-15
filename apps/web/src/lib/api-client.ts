@@ -30,6 +30,28 @@ interface RequestOptions {
   body?: unknown;
 }
 
+// Auth endpoints intentionally never trigger the session-expiry redirect
+// below: an anonymous visitor's routine `/auth/me` check is expected to
+// 401, and login/register/logout are pre-/post-session by definition.
+const AUTH_PATH_PREFIX = '/auth/';
+let redirectingToLogin = false;
+
+/** Centralized session-expiry handling: any OTHER protected-page request
+ * that gets a real 401 (cookie present but the JWT expired/invalid —
+ * middleware only checks cookie presence, not validity) redirects to
+ * login once, preserving the page the customer was on. A module-level
+ * guard prevents a page firing several parallel requests from triggering
+ * multiple redirects/loops. */
+function handleSessionExpiry(path: string) {
+  if (typeof window === 'undefined') return;
+  if (path.startsWith(AUTH_PATH_PREFIX)) return;
+  if (redirectingToLogin) return;
+  const current = window.location.pathname + window.location.search;
+  if (current.startsWith('/login')) return;
+  redirectingToLogin = true;
+  window.location.href = `/login?redirect=${encodeURIComponent(current)}&expired=1`;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   let response: globalThis.Response;
   try {
@@ -51,6 +73,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       payload && typeof payload === 'object' && 'message' in payload
         ? (payload as ApiErrorPayload)
         : { message: 'Something went wrong. Please try again.' };
+    if (response.status === 401) handleSessionExpiry(path);
     throw new ApiError(response.status, errorPayload);
   }
 

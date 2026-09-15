@@ -6,6 +6,9 @@ import type { ProductDetailDto } from '@silaikaam/types';
 import { Button } from '@/components/ui/Button';
 import { FormBanner } from '@/components/ui/FormBanner';
 import { ApiError, NetworkError } from '@/lib/api-client';
+import { useAuth } from '@/providers/AuthProvider';
+import { wishlistApi } from '@/features/wishlist/api';
+import { SaveButton } from '@/features/wishlist/components/SaveButton';
 import { marketplaceApi } from '../api';
 import styles from './ProductDetailView.module.css';
 
@@ -35,12 +38,21 @@ export function ProductDetailView({ slug, initial }: { slug: string; initial?: I
     Number(initial?.qty) > 0 ? Number(initial?.qty) : 1,
   );
 
+  const [isSaved, setIsSaved] = useState(false);
+  const { status: authStatus } = useAuth();
+
   const load = useCallback(async () => {
     setLoadState({ kind: 'loading' });
     try {
       const data = await marketplaceApi.findBySlug(slug);
       setProduct(data);
       setLoadState({ kind: 'ready' });
+      if (authStatus === 'authenticated') {
+        wishlistApi
+          .list()
+          .then((items) => setIsSaved(items.some((i) => i.productId === data.id)))
+          .catch(() => {});
+      }
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
         setLoadState({
@@ -56,7 +68,7 @@ export function ProductDetailView({ slug, initial }: { slug: string; initial?: I
           : 'Could not load this product. Please try again.';
       setLoadState({ kind: 'error', message });
     }
-  }, [slug]);
+  }, [slug, authStatus]);
 
   useEffect(() => {
     void load();
@@ -174,7 +186,10 @@ export function ProductDetailView({ slug, initial }: { slug: string; initial?: I
 
           <div>
             <p className={styles.category}>{product.category.name}</p>
-            <h1 className={styles.name}>{product.name}</h1>
+            <div className={styles.titleRow}>
+              <h1 className={styles.name}>{product.name}</h1>
+              <SaveButton productId={product.id} initialSaved={isSaved} />
+            </div>
 
             <div className={styles.priceRow}>
               {hasDiscount ? (

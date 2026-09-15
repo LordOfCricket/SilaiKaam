@@ -12,6 +12,9 @@ import { ExistingGarmentModule } from './modules/existing-garment/existing-garme
 import { CustomStitchingModule } from './modules/custom-stitching/custom-stitching.module';
 import { CartModule } from './modules/cart/cart.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -27,6 +30,9 @@ import { OrdersModule } from './modules/orders/orders.module';
     CustomStitchingModule,
     CartModule,
     OrdersModule,
+    WishlistModule,
+    NotificationsModule,
+    SupportModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
