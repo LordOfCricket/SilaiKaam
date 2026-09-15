@@ -17,6 +17,9 @@
     "three": "^0.180.0",
     "@react-three/fiber": "^9.7.0",
     "@react-three/drei": "^10.7.8",
+    "@silaikaam/constants": "workspace:*",
+    "@silaikaam/types": "workspace:*",
+    "@silaikaam/validation": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {

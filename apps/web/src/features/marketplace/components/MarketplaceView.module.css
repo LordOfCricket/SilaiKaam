@@ -1,0 +1,132 @@
+.page {
+  min-height: 100vh;
+  background: var(--color-canvas);
+  padding: var(--space-8) var(--space-4) var(--space-9);
+}
+
+.container {
+  max-width: 72rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title {
+  font-size: 2rem;
+}
+
+.subtitle {
+  color: var(--color-ink-faint);
+  font-size: var(--fs-small);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.filterLabel {
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.input,
+.select {
+  font-family: var(--font-body);
+  font-size: var(--fs-small);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--color-thread);
+  box-shadow: 0 0 0 3px rgba(166, 67, 44, 0.15);
+}
+
+.searchField {
+  flex: 1 1 14rem;
+}
+
+.priceRange {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.priceInput {
+  width: 5.5rem;
+}
+
+.clearButton {
+  background: none;
+  border: none;
+  color: var(--color-thread);
+  font-weight: 600;
+  font-size: var(--fs-small);
+  cursor: pointer;
+  padding: 0.55rem 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-5);
+}
+
+.centerState {
+  min-height: 30vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-ink-faint);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.pageButton {
+  background: none;
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  padding: 0.5rem 1.25rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-ink);
+}
+
+.pageButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

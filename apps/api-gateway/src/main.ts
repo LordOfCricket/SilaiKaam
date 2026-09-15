@@ -1,14 +1,22 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
+import express from 'express';
 import { createLogger, type Logger } from '@silaikaam/logger';
 import { AppModule } from './app.module';
 import { loadGatewayEnv } from './config/configuration';
 
+// Garment/reference photos flow through the gateway as base64 JSON on
+// their way to fitting-service, so the default ~100kb body limit is far
+// too small.
+const JSON_BODY_LIMIT = '20mb';
+
 const SERVICE_NAME = 'api-gateway';
 
 async function listenWithRetry(
-  listen: () => Promise<void>,
+  listen: () => Promise<unknown>,
   logger: Logger,
   port: number,
   attempts = 5,
@@ -30,9 +38,12 @@ async function bootstrap() {
   const env = loadGatewayEnv();
   const logger = createLogger({ serviceName: SERVICE_NAME });
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 
-  app.enableCors();
+  app.enableCors({ origin: env.WEB_APP_URL, credentials: true });
+  app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

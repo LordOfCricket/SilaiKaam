@@ -10,3 +10,4 @@ export function getPrismaClient(): PrismaClient {
 }
 
 export { PrismaClient };
+export * from '@prisma/client';

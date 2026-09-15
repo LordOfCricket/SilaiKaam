@@ -1,5 +1,13 @@
-// Shared, domain-agnostic TypeScript types.
-// Business/domain types are intentionally NOT defined yet.
+// Shared, domain-agnostic TypeScript types, plus the identity/customer
+// domain types introduced for the customer registration/login/profile flow.
+
+export * from './auth';
+export * from './customer';
+export * from './fit-profile';
+export * from './catalog';
+export * from './fitting-request';
+export * from './cart';
+export * from './order';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

@@ -1,0 +1,85 @@
+.card {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-weight: 600;
+}
+
+.badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-thread);
+  background: rgba(166, 67, 44, 0.1);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.lines {
+  color: var(--color-ink-soft);
+  font-size: var(--fs-small);
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-1);
+}
+
+.actionButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+}
+
+.actionButton:hover {
+  color: var(--color-ink);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.destructive:hover {
+  color: var(--color-thread);
+}
+
+.emptyState {
+  color: var(--color-ink-faint);
+  font-size: var(--fs-small);
+  padding: var(--space-4) 0;
+  text-align: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-small);
+}

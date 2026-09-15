@@ -1,14 +1,21 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import express from 'express';
 import { createLogger, type Logger } from '@silaikaam/logger';
 import { AppModule } from './app.module';
 import { loadServiceEnv } from './config/configuration';
 
+// Garment/reference photos are stored inline as base64 (no cloud storage
+// provider exists yet), so requests can be a few MB — well past Express's
+// 100kb JSON default.
+const JSON_BODY_LIMIT = '20mb';
+
 const SERVICE_NAME = 'fitting-service';
 
 async function listenWithRetry(
-  listen: () => Promise<void>,
+  listen: () => Promise<unknown>,
   logger: Logger,
   port: number,
   attempts = 5,
@@ -30,7 +37,9 @@ async function bootstrap() {
   const env = loadServiceEnv();
   const logger = createLogger({ serviceName: SERVICE_NAME });
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   await listenWithRetry(

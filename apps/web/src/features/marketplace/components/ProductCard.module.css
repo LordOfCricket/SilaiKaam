@@ -1,0 +1,90 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+  transition: border-color 0.25s var(--ease-editorial);
+}
+
+.card:hover {
+  border-color: var(--color-thread);
+}
+
+.visual {
+  aspect-ratio: 3 / 4;
+  background: var(--color-canvas-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-faint);
+  position: relative;
+}
+
+.visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.badge {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+}
+
+.badgeOut {
+  color: var(--color-thread);
+}
+
+.info {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.category {
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.name {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.priceRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.price {
+  font-weight: 700;
+}
+
+.originalPrice {
+  color: var(--color-ink-faint);
+  text-decoration: line-through;
+  font-size: var(--fs-small);
+}
+
+.discountPercent {
+  font-size: var(--fs-small);
+  color: var(--color-success);
+  font-weight: 600;
+}

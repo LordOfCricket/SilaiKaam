@@ -1,14 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { primaryNavLinks } from '@/features/homepage/data/navigation';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/providers/AuthProvider';
 import { MobileMenu } from './MobileMenu';
 import styles from './Navbar.module.css';
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { status } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -33,6 +36,23 @@ export function Navbar() {
         </nav>
 
         <div className={styles.actions}>
+          {status === 'authenticated' ? (
+            <>
+              <Link href="/cart" className={styles.link}>
+                Cart
+              </Link>
+              <Link href="/orders" className={styles.link}>
+                My Orders
+              </Link>
+              <Link href="/dashboard" className={styles.link}>
+                Dashboard
+              </Link>
+            </>
+          ) : status === 'unauthenticated' ? (
+            <Link href="/login" className={styles.link}>
+              Log in
+            </Link>
+          ) : null}
           <Button href="#get-fit" variant="secondary" className={styles.cta}>
             Get My Fit
           </Button>

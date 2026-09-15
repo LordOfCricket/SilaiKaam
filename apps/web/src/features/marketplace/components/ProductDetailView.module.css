@@ -1,0 +1,221 @@
+.page {
+  min-height: 100vh;
+  background: var(--color-canvas);
+  padding: var(--space-8) var(--space-4) var(--space-9);
+}
+
+.container {
+  max-width: 56rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.backLink {
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
+  font-weight: 600;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-7);
+}
+
+@media (max-width: 700px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.visual {
+  aspect-ratio: 3 / 4;
+  background: var(--color-canvas-deep);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-faint);
+  overflow: hidden;
+}
+
+.visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.category {
+  font-size: 0.8rem;
+  color: var(--color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.name {
+  font-size: 2rem;
+  margin-top: var(--space-2);
+}
+
+.priceRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.price {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.originalPrice {
+  color: var(--color-ink-faint);
+  text-decoration: line-through;
+}
+
+.discountPercent {
+  color: var(--color-success);
+  font-weight: 600;
+  font-size: var(--fs-small);
+}
+
+.availability {
+  margin-top: var(--space-3);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+
+.availabilityIn {
+  color: var(--color-success);
+}
+
+.availabilityOut {
+  color: var(--color-thread);
+}
+
+.description {
+  margin-top: var(--space-5);
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+}
+
+.optionGroup {
+  margin-top: var(--space-5);
+}
+
+.optionLabel {
+  font-size: 0.75rem;
+  color: var(--color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: var(--space-2);
+}
+
+.optionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.chip {
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-size: var(--fs-small);
+}
+
+.optionButton {
+  border: 1px solid var(--color-line-strong);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  min-height: 2.25rem;
+}
+
+.optionButton:hover {
+  border-color: var(--color-ink);
+}
+
+.optionButtonSelected {
+  border-color: var(--color-thread);
+  background: var(--color-ink);
+  color: var(--color-surface);
+}
+
+.optionButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+.quantityRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.quantityInput {
+  width: 4.5rem;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.7rem;
+  min-height: 2.5rem;
+}
+
+.journeySection {
+  margin-top: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.journeyCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  flex-wrap: wrap;
+}
+
+.journeyInfo strong {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.journeyInfo span {
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
+}
+
+.selectionHint {
+  font-size: var(--fs-small);
+  color: var(--color-thread);
+}
+
+.notice {
+  margin-top: var(--space-6);
+  font-size: var(--fs-small);
+  color: var(--color-ink-faint);
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--space-4);
+}
+
+.centerState {
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}

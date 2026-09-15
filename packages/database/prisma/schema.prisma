@@ -1,5 +1,6 @@
 // Base Prisma schema for SilaiKaam.
-// Intentionally empty of models — the final domain schema is designed in a later phase.
+// Domain models are added incrementally, phase by phase. Currently covers:
+// identity (User/Role) and the customer profile + address foundation.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,4 +9,536 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  TAILOR
+  FITTING_EXPERT
+  SHOP_OWNER
+  STAFF
+  SUPER_ADMIN
+}
+
+/// Owned by identity-service. Authentication credentials + role only —
+/// no profile data lives here.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customerProfile CustomerProfile?
+
+  @@map("users")
+}
+
+enum FitPreferenceType {
+  SLIM
+  REGULAR
+  RELAXED
+  CUSTOM
+}
+
+enum MeasurementKey {
+  CHEST
+  WAIST
+  SHOULDER
+  SLEEVE
+  ARMHOLE
+  SHIRT_LENGTH
+  TROUSER_WAIST
+  HIP
+  INSEAM
+  OUTSEAM
+  THIGH
+  KNEE
+}
+
+/// Owned by user-service. One-to-one with User, created alongside it at
+/// registration time.
+model CustomerProfile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName    String
+  phone       String?
+  dateOfBirth DateTime?
+  gender      String?
+  avatarUrl   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  addresses   Address[]
+  fitProfiles FitProfile[]
+  cart        Cart?
+  orders      Order[]
+
+  @@map("customer_profiles")
+}
+
+/// Owned by user-service. V1 UX exposes a single active fit profile per
+/// customer, but the model is one-to-many so a later batch can offer
+/// multiple named profiles (e.g. "Shirts", "Formal") without a migration.
+model FitProfile {
+  id                String            @id @default(uuid())
+  customerProfileId String
+  customerProfile   CustomerProfile   @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  label             String
+  fitPreference     FitPreferenceType @default(REGULAR)
+  notes             String?
+  isActive          Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  measurements             FitMeasurement[]
+  cartItems                CartItem[]
+  existingGarmentRequests  ExistingGarmentRequest[]
+  customStitchingRequests  CustomStitchingRequest[]
+
+  @@index([customerProfileId])
+  @@map("fit_profiles")
+}
+
+/// One row per measured body part. Sparse by design — only the
+/// measurements a customer actually enters exist, nothing is required
+/// up front, and new MeasurementKey values can be added later.
+model FitMeasurement {
+  id           String         @id @default(uuid())
+  fitProfileId String
+  fitProfile   FitProfile     @relation(fields: [fitProfileId], references: [id], onDelete: Cascade)
+  key          MeasurementKey
+  value        Float
+  unit         String         @default("in")
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@unique([fitProfileId, key])
+  @@map("fit_measurements")
+}
+
+/// Owned by user-service. Addresses are soft-deleted (isActive) rather than
+/// removed, so a future Order can keep referencing/snapshotting the address
+/// that was current at order time without that history disappearing.
+model Address {
+  id                String   @id @default(uuid())
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  label             String?
+  line1             String
+  line2             String?
+  city              String
+  state             String
+  postalCode        String
+  country           String   @default("IN")
+  isDefault         Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([customerProfileId])
+  @@map("addresses")
+}
+
+enum ProductAvailability {
+  IN_STOCK
+  OUT_OF_STOCK
+  PREORDER
+}
+
+/// Owned by catalog-service. Customer-facing discovery only in this batch —
+/// no shop-owner management endpoints exist yet.
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  products        Product[]
+  fittingServices FittingServiceCategory[]
+
+  @@map("categories")
+}
+
+model Product {
+  id                String              @id @default(uuid())
+  categoryId        String
+  category          Category            @relation(fields: [categoryId], references: [id])
+  name              String
+  slug              String              @unique
+  description       String?
+  price             Float
+  discountPrice     Float?
+  currency          String              @default("INR")
+  imageUrl          String?
+  availability      ProductAvailability @default(IN_STOCK)
+  sizes             String[]            @default([])
+  colors            String[]            @default([])
+  // Data-driven Buy + Fit eligibility (Phase 8) — never inferred client-side.
+  isFittingEligible Boolean             @default(false)
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  variants  ProductVariant[]
+  cartItems CartItem[]
+
+  @@index([categoryId])
+  @@map("products")
+}
+
+/// A concrete, purchasable size/color combination with its own stock and
+/// optional price override. A product with no variant rows is treated by
+/// the API as a single implicit variant using the product's own
+/// price/availability (kept for compatibility with Batch 2 listings).
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      String?
+  color     String?
+  price     Float?
+  stock     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartItems CartItem[]
+
+  @@unique([productId, size, color])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+enum FittingServiceType {
+  SLEEVE_ALTERATION
+  LENGTH_ALTERATION
+  WAIST_ALTERATION
+  CHEST_ALTERATION
+  SHOULDER_ALTERATION
+  TAPERING
+}
+
+/// Owned by catalog-service. `basePrice` is nullable on purpose: no pricing
+/// service exists yet, so it stays null until one populates it — the API
+/// reports "pricing unavailable" rather than a fabricated fee.
+model FittingService {
+  id                   String             @id @default(uuid())
+  type                 FittingServiceType @unique
+  name                 String
+  description          String?
+  requiredMeasurements MeasurementKey[]
+  basePrice            Float?
+  isActive             Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  categories FittingServiceCategory[]
+
+  @@map("fitting_services")
+}
+
+/// Which garment categories a fitting service applies to — lets the
+/// customer-facing product page show only relevant services.
+model FittingServiceCategory {
+  id               String         @id @default(uuid())
+  fittingServiceId String
+  fittingService   FittingService @relation(fields: [fittingServiceId], references: [id], onDelete: Cascade)
+  categoryId       String
+  category         Category       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([fittingServiceId, categoryId])
+  @@map("fitting_service_categories")
+}
+
+enum GarmentCondition {
+  NEW
+  GOOD
+  WORN
+  DAMAGED
+}
+
+enum GarmentPhotoRole {
+  FRONT
+  BACK
+  AREA
+  DAMAGE
+}
+
+/// Owned by fitting-service. A customer's request to have a garment they
+/// already own altered. Media is stored inline as base64 (no cloud storage
+/// provider exists yet) and served only through an ownership-gated
+/// endpoint — never exposed publicly.
+model ExistingGarmentRequest {
+  id                String           @id @default(uuid())
+  customerProfileId String
+  garmentType       String
+  brand             String?
+  currentSize       String?
+  condition         GarmentCondition
+  notes             String?
+  fitProfileId      String?
+  fitProfile        FitProfile?      @relation(fields: [fitProfileId], references: [id])
+  selectedFittingServiceIds String[] @default([])
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  photos   GarmentPhoto[]
+  cartItem CartItem?
+
+  @@index([customerProfileId])
+  @@map("existing_garment_requests")
+}
+
+model GarmentPhoto {
+  id         String                 @id @default(uuid())
+  requestId  String
+  request    ExistingGarmentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  role       GarmentPhotoRole
+  mimeType   String
+  dataBase64 String
+  sizeBytes  Int
+  createdAt  DateTime               @default(now())
+
+  @@map("garment_photos")
+}
+
+/// Owned by fitting-service. A request for a brand-new, made-to-order
+/// garment. `basePrice`-style pricing doesn't exist for this journey yet —
+/// it is always "quote required" until a future pricing/quote workflow
+/// attaches a real price.
+model CustomStitchingRequest {
+  id                  String      @id @default(uuid())
+  customerProfileId   String
+  garmentType         String
+  fabricDetails       String?
+  designDetails       String?
+  color               String?
+  specialRequirements String?
+  notes               String?
+  fitProfileId        String?
+  fitProfile          FitProfile? @relation(fields: [fitProfileId], references: [id])
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  referenceImages CustomStitchingReferenceImage[]
+  cartItem        CartItem?
+
+  @@index([customerProfileId])
+  @@map("custom_stitching_requests")
+}
+
+model CustomStitchingReferenceImage {
+  id         String                  @id @default(uuid())
+  requestId  String
+  request    CustomStitchingRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  mimeType   String
+  dataBase64 String
+  sizeBytes  Int
+  createdAt  DateTime                @default(now())
+
+  @@map("custom_stitching_reference_images")
+}
+
+/// Owned by order-service. One cart per customer, created lazily on first
+/// add. Cart items never cache price/stock — every read re-validates them
+/// live against the owning tables so the cart can never drift from reality.
+model Cart {
+  id                String          @id @default(uuid())
+  customerProfileId String          @unique
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+enum CartItemType {
+  PRODUCT_ONLY
+  BUY_FIT
+  EXISTING_GARMENT
+  CUSTOM_STITCHING
+}
+
+/// A discriminated union, not an ambiguous blob: `type` says which journey
+/// this row represents, and only that journey's fields are populated. Every
+/// reference is a real FK validated against its owning table — never a
+/// loose string/JSON blob — so each configuration stays unambiguous.
+model CartItem {
+  id     String       @id @default(uuid())
+  cartId String
+  cart   Cart         @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  type   CartItemType
+
+  // PRODUCT_ONLY / BUY_FIT
+  productId String?
+  product   Product?        @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int?
+
+  // BUY_FIT only
+  fitProfileId              String?
+  fitProfile                FitProfile? @relation(fields: [fitProfileId], references: [id])
+  selectedFittingServiceIds String[]    @default([])
+  notes                     String?
+
+  // EXISTING_GARMENT
+  existingGarmentRequestId String?                 @unique
+  existingGarmentRequest   ExistingGarmentRequest? @relation(fields: [existingGarmentRequestId], references: [id], onDelete: Cascade)
+
+  // CUSTOM_STITCHING
+  customStitchingRequestId String?                 @unique
+  customStitchingRequest   CustomStitchingRequest? @relation(fields: [customStitchingRequestId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+enum OrderItemType {
+  PRODUCT_ONLY
+  PRODUCT_WITH_FITTING
+  EXISTING_GARMENT_FITTING
+  CUSTOM_STITCHING
+}
+
+enum PaymentState {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  FITTING
+  QUALITY_CHECK
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+/// Owned by order-service. Created once, atomically, from a validated Cart.
+/// Holds only aggregates — every historical fact a customer needs to see
+/// again lives in OrderItem/OrderAddressSnapshot so later Product/FitProfile
+/// /Address/pricing changes can never rewrite what was actually ordered.
+model Order {
+  id                String       @id @default(uuid())
+  customerProfileId String
+  customerProfile   CustomerProfile @relation(fields: [customerProfileId], references: [id])
+  status            OrderStatus  @default(PLACED)
+  paymentState      PaymentState @default(PENDING)
+  /// Client-supplied once per checkout attempt and re-sent on retry so a
+  /// double "Place Order" click (or a client-side retry after a dropped
+  /// response) can never create two orders — enforced by the unique index,
+  /// not just an application-level check.
+  idempotencyKey    String       @unique
+  productSubtotal   Float        @default(0)
+  fittingSubtotal   Float        @default(0)
+  discountTotal     Float        @default(0)
+  total             Float        @default(0)
+  hasUnpricedItems  Boolean      @default(false)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  items           OrderItem[]
+  addressSnapshot OrderAddressSnapshot?
+  statusHistory   OrderStatusHistory[]
+
+  @@index([customerProfileId])
+  @@map("orders")
+}
+
+/// An immutable copy of the delivery address at order time. Never updated
+/// when the customer edits/removes the underlying Address later.
+model OrderAddressSnapshot {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  label      String?
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  country    String
+  createdAt  DateTime @default(now())
+
+  @@map("order_address_snapshots")
+}
+
+/// One row per cart item converted at checkout. Every field here is a
+/// snapshot taken at order time — never a live join to Product/FitProfile/
+/// FittingService, so those can change freely afterward without altering
+/// order history.
+model OrderItem {
+  id      String        @id @default(uuid())
+  orderId String
+  order   Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  type    OrderItemType
+
+  // PRODUCT_ONLY / PRODUCT_WITH_FITTING
+  productId      String?
+  productName    String?
+  variantId      String?
+  variantSize    String?
+  variantColor   String?
+  quantity       Int?
+  unitPrice      Float?
+  discountAmount Float?
+
+  // PRODUCT_WITH_FITTING only
+  fitProfileId              String?
+  fitProfileLabel           String?
+  fitPreference             String?
+  measurementsSnapshot      Json?
+  fittingServicesSnapshot   Json?
+  notes                     String?
+
+  // EXISTING_GARMENT_FITTING
+  existingGarmentRequestId String?
+  garmentType              String?
+  garmentCondition         String?
+  garmentBrand             String?
+  garmentPhotoCount        Int?
+
+  // CUSTOM_STITCHING
+  customStitchingRequestId String?
+  fabricDetails            String?
+  designDetails            String?
+
+  lineTotal Float?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+/// Append-only — reconstructs the customer-facing timeline. Only ever
+/// written by order-service; no staff/tailor identity is ever stored here.
+model OrderStatusHistory {
+  id        String      @id @default(uuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId])
+  @@map("order_status_history")
 }
